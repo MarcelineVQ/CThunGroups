@@ -1,6 +1,6 @@
 local DEBUG = false
 
-function print(...)
+local function print(...)
     local s = ""
     for i,v in ipairs(arg) do
         s = s .. tostring(v)
@@ -29,16 +29,20 @@ local group_size = 7
 local button_width = 110
 
 -- Initialize addon frame
-local addonFrame = CreateFrame("Frame", "RaidUIAddonFrame", UIParent)
+local addonFrame = CreateFrame("Frame", "CThunGroups", UIParent)
 addonFrame:SetWidth(frame_width+10)
 addonFrame:SetHeight(group_height*6+10)
 addonFrame:SetPoint("CENTER", UIParent, "CENTER")
+addonFrame:SetFrameStrata("TOOLTIP")
+
 addonFrame:SetMovable(true)
 addonFrame:EnableMouse(true)
 -- addonFrame:SetToplevel(true)
 -- addonFrame:SetFrameStrata("HIGH")
 addonFrame:SetBackdrop({
-  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+  -- bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+  bgFile = "Interface\\Buttons\\WHITE8x8",
+  -- bgFile = nil,
   edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
   tile = true,
   tileSize = 16,
@@ -65,7 +69,8 @@ end
 local cthun = addonFrame:CreateTexture(nil, "OVERLAY")
 cthun:SetTexture("Interface\\Addons\\CThunGroups\\images\\cthun2.tga")
 cthun:SetPoint("BOTTOM", addonFrame, "TOP", 0 ,0)
-local scale = 0.75
+-- local scale = 0.75
+local scale = 1
 cthun:SetWidth(512*scale)
 cthun:SetHeight(512*scale)
 
@@ -133,6 +138,12 @@ local roleMarkerTextures = {
     [3] = "Interface\\Addons\\CThunGroups\\images\\healer2", -- Healer
 }
 
+-- local roleMarkerTextures = {
+--   [1] = "Interface\\Addons\\CThunGroups\\images\\melee3", -- Melee
+--   [2] = "Interface\\Addons\\CThunGroups\\images\\ranged3", -- Ranged
+--   [3] = "Interface\\Addons\\CThunGroups\\images\\healer3", -- Healer
+-- }
+
 -- Function to update raid members list
 local function UpdateRaidMembers()
   if GetNumRaidMembers() > 0 then
@@ -151,19 +162,6 @@ end
 
 -- Function to update raid member frames
 local function UpdateGroups()
-    -- first move all group data back to raid, we don't do this earlier so that the user
-    -- can make changes without things moving around. This also saves the mark info.
-    -- for _,group in ipairs(groups) do
-    --   for _,member in ipairs(group) do
-    --     if member and raidMembers[name] == member.name then
-    --         print("hit: ", member.name)
-    --       raidMembers[name].role = member.role
-    --       raidMembers[name].symbol = member.symbol
-    --     end
-    --   end
-    -- end
-    -- ^ don't need to do this, info is update on the on-click
-
     -- Initialize groups
     for i = 1, 9 do
         groups[i] = {}
@@ -177,9 +175,11 @@ local function UpdateGroups()
         -- print(name," ",symbol)
         -- is in raid to actually group?
         local in_raid = false
+        local raid_id = 0
         for i=1,40 do
           if UnitName("raid"..i) == name then
             in_raid = true
+            raid_id = i
             break
           end
         end
@@ -187,7 +187,7 @@ local function UpdateGroups()
         if in_raid or DEBUG then
           local ix = symbol
           if not (ix > 0 and ix <= 9) then ix = 9 end -- stick true unknowns in group 9
-          table.insert(groups[ix], {name = name, class = data.class, role = data.role, symbol = symbol})
+          table.insert(groups[ix], {name = name, raid_id = raid_id, class = data.class, role = data.role, symbol = symbol})
         end
     end
 
@@ -212,19 +212,55 @@ local function UpdateGroups()
         end
 
       -- Add members to the sorted group
-      for _, member in ipairs(meleeMembers) do
-          table.insert(sortedGroup, member)
-      end
-      for _, member in ipairs(rangedMembers) do
-          table.insert(sortedGroup, member)
-      end
-      for _, member in ipairs(healerMembers) do
-          table.insert(sortedGroup, member)
-      end
-      -- if getn(sortedGroup) > 5 and addonFrame:IsVisible() then
-        -- print("WARNING: Group "..i.." is attempting to be larger than 5 members!")
-        -- I want to allow this but only show up to 7
+      -- for _, member in ipairs(meleeMembers) do
+      --     table.insert(sortedGroup, member)
       -- end
+      -- for _, member in ipairs(rangedMembers) do
+      --     table.insert(sortedGroup, member)
+      -- end
+      -- for _, member in ipairs(healerMembers) do
+      --     table.insert(sortedGroup, member)
+      -- end
+-- Add melee members to the sorted group
+for _, member in ipairs(meleeMembers) do
+  table.insert(sortedGroup, member)
+end
+
+-- Initialize a variable to track the index for inserting ranged and healer members
+local insertIndex = 3
+
+-- Count the total group members
+local totalMembers = 0
+for _, memberType in ipairs({meleeMembers, rangedMembers, healerMembers}) do
+  for _, _ in ipairs(memberType) do
+      totalMembers = totalMembers + 1
+  end
+end
+
+-- If total group members are less than 5, only then disallow non-melee members in the first two spots
+if totalMembers < 5 then
+  -- Insert ranged members after the 2nd position
+  for _, member in ipairs(rangedMembers) do
+      table.insert(sortedGroup, insertIndex, member)
+      insertIndex = insertIndex + 1
+  end
+
+  -- Insert healer members after the 2nd position
+  for _, member in ipairs(healerMembers) do
+      table.insert(sortedGroup, insertIndex, member)
+      insertIndex = insertIndex + 1
+  end
+else
+  -- If total group members are 5 or more, insert ranged and healer members without restriction
+  for _, member in ipairs(rangedMembers) do
+      table.insert(sortedGroup, member)
+  end
+
+  for _, member in ipairs(healerMembers) do
+      table.insert(sortedGroup, member)
+  end
+end
+
       groups[i] = sortedGroup
     end
   end
@@ -246,7 +282,7 @@ local function GetClassColor(class)
 end
 
 local function ColorizeName(name, class)
-  local classColor = GetClassColor(string.upper(class))
+  local classColor = GetClassColor(class and string.upper(class) or "noclass")
   return string.format("|cff%02x%02x%02x%s|r", classColor.r * 255, classColor.g * 255, classColor.b * 255, name)
 end
 
@@ -284,6 +320,11 @@ local function DisplayGroups()
           frame.raidMarker:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
           SetRaidTargetIconTexture(frame.raidMarker, symbol)
         end
+        if config_mode and not UnitIsConnected("raid"..member.raid_id) then
+          frame:SetBackdropColor(0.5, 0.5, 0.5, 1)
+        else
+          frame:SetBackdropColor(frame.bgcolor[1],frame.bgcolor[2],frame.bgcolor[3],frame.bgcolor[4])
+        end
         frame:Show()
       else
         frame:Hide()
@@ -302,9 +343,8 @@ local function RaiderOnClick(i,j)
       local member = groups[i][j]
       -- print("i:",i," j:", j)
       if member then
-        -- print(member.name)
-        DataSource[member.name].role = math.mod(DataSource[member.name].role, 3) + 1
-        member.role = math.mod(member.role, 3) + 1
+        DataSource[member.name].role = DataSource[member.name].role >= 3 and 0 or DataSource[member.name].role + 1 
+        member.role = member.role >= 3 and 0 or member.role + 1
       end
       DisplayGroups()
     elseif button == "LeftButton" then
@@ -333,7 +373,8 @@ local function InitDisplayGroups(group)
               frame:SetHeight(group_height)
               frame:SetPoint("TOP", addonFrame, "TOP", xOffset, -yOffset)
               frame:SetBackdrop({
-                  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                  -- bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                  bgFile = "Interface\\Buttons\\WHITE8x8",
                   edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
                   tile = true,
                   tileSize = 16,
@@ -346,12 +387,16 @@ local function InitDisplayGroups(group)
                   },
               })
               if j <= 2 then
-                frame:SetBackdropColor(250/255, 54/255, 35/255, 1)
+                frame:SetBackdropColor(250/255, 54/255, 35/255, 0.6)
               elseif j == 3 then
-                frame:SetBackdropColor(168/255, 213/255, 148/255, 1)
+                -- frame:SetBackdropColor(168/255, 213/255, 148/255, 0.6)
+                frame:SetBackdropColor(0.2,0.9,0.16, 0.6)
               else
-                frame:SetBackdropColor(255/255, 214/255, 66/255, 1)
+                -- frame:SetBackdropColor(255/255, 214/255, 66/255, 0.6)
+                frame:SetBackdropColor(1, 0.885, 0.054, 0.6)
               end
+              -- store for greying out offlines later
+              frame.bgcolor = {frame:GetBackdropColor()}
               frame:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
               -- Role symbol text
               frame.roleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -369,6 +414,10 @@ local function InitDisplayGroups(group)
               frame.raidMarker:Hide()
               -- Name text
               frame.nameText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+              -- frame.nameText:SetFont(frame.nameText:GetFont(), 12, "OUTLINE") 
+              frame.nameText:SetFont(frame.nameText:GetFont(), 16) 
+              frame.nameText:SetShadowColor(0,0,0,1)
+              frame.nameText:SetShadowOffset(1,-1)
               frame.nameText:SetPoint("LEFT", frame.raidMarker, "LEFT", 0, 0)
               -- Set click handler
               local ix_i,ix_j = i,j
@@ -382,16 +431,75 @@ local function InitDisplayGroups(group)
   end
 end
 
--- Function to handle clicks
+-- I need an onupdate to periodically grey out offliners
+
+local function tContains(table, item)
+  if not table or not item then return false end
+  for _, value in pairs(table) do
+      if value == item then
+          return true
+      end
+  end
+  return false
+end
+
+
+local promote_toggled = false
+local promoteds = {}
+local function PromoteIfEligible(memberName)
+  if not tContains(promoteds, memberName) then
+    for i = 1, GetNumRaidMembers() do
+        local name, rank = GetRaidRosterInfo(i)
+        if name == memberName and rank == 0 and name ~= UnitName("player") then
+            PromoteToAssistant(name)
+            table.insert(promoteds, name)
+            print("Promoting: ", name)
+            break -- Exit the loop once the matching member is found and promoted
+        end
+    end
+  end
+end
+
+-- This function first tracks all the promoted raid members, then it promotes any who aren't promoted.
+-- when pressed again it depromotes only those who it promoted
+-- DemoteAssistant("unit")
+-- PromoteToAssistant(member)
 local function PromoteOnClick()
   local button = arg1
   if button == "LeftButton" and IsRaidLeader("player") then
-      for _,group in ipairs(groups) do
-        local member = group[1]
-        if member then PromoteToAssistant(member.name) end
+    if promote_toggled then
+      -- Demote previously promoted members
+      for i, memberName in ipairs(promoteds) do
+        DemoteAssistant(memberName)
+        print("Demoting: ", memberName)
+        promoteds[i] = nil
       end
+      promoteds = {}
+    else
+      -- Promote the first two members of each group
+      for _, group in ipairs(groups) do
+        if group[1] and group[1].name ~= "" then PromoteIfEligible(group[1].name) end
+        if group[2] and group[2].name ~= "" then PromoteIfEligible(group[2].name) end
+        end
+    end
+    promote_toggled = not promote_toggled
   end
 end
+
+
+
+-- function Promotes(names_string)
+--   for name in string.gfind(names_string,"([^,]+)") do
+--     PromoteToAssistant(name)
+--   end
+--   for i = 1, GetNumRaidMembers() do
+--     local name,rank,_,_,class,_ = GetRaidRosterInfo(i)
+--     if class == "Mage" then PromoteToAssistant(name) end
+--   end
+-- end
+
+
+
 
 local function InitPromoteButton()
   local frame = {}
@@ -499,6 +607,11 @@ local function ToggleMarksButton()
   frame:SetScript("OnClick", function()
     config_mode = not config_mode
     DisplayGroups()
+    if config_mode then
+      addonFrame:SetBackdropColor(0, 0, 0, 0.5)
+    else
+      addonFrame:SetBackdropColor(0, 0, 0, 0.9)
+    end
   end)
   addonFrame[name] = frame
 end
@@ -568,7 +681,7 @@ end
 
 local function EventHandler()
   if enabled then
-    if event == "RAID_ROSTER_UPDATE" then
+    if event == "RAID_ROSTER_UPDATE" and (GetNumRaidMembers() > 0) then
       -- print("roster update")
       UpdateRaidMembers()
       UpdateGroups()
@@ -577,28 +690,51 @@ local function EventHandler()
   end
 end
 
+
+local first_go = true
+local elapsed = 0
+local offliners = {}
+local function UpdateFrame()
+  elapsed = elapsed + arg1
+  if elapsed > 2 then
+    elapsed = 0
+    if first_go then
+      UpdateRaidMembers()
+      UpdateGroups()
+      DisplayGroups()
+    else
+      DisplayGroups()
+    end
+  end
+end
+
+-- have the toggle thing darken the bg
+-- have it color offlines
 local function InitAddon()
   if event == "ADDON_LOADED" and arg1 == "CThunGroups" then
-    -- print("loaded")
+    GuildRoster()
+  elseif event == "CHAT_MSG_SYSTEM" then  -- still too early sometimes, need to just make a timer I guess or look for events that happen even later
     if not CThunGroupsDB then CThunGroupsDB = {} end
     local i_guild,_ = GetGuildInfo("player")
+    print("roster update: ",i_guild or "none")
     guild = i_guild or guild
     if not CThunGroupsDB[guild] then CThunGroupsDB[guild] = {} end
     if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
     -- if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
 
-    -- Create minimap icon
-    -- local minimapIcon = CreateMinimapIcon() 
-    -- ^ no good yet
+    addonFrame:UnregisterEvent("GUILD_ROSTER_UPDATE")
+    addonFrame:UnregisterEvent("CHAT_MSG_SYSTEM")
+    addonFrame:UnregisterEvent("ADDON_LOADED")
 
     InitDisplayGroups()
     InitCalcButton()
     InitPromoteButton()
     ToggleMarksButton()
-    UpdateRaidMembers()
-    UpdateGroups()
-    DisplayGroups()
+    -- UpdateRaidMembers()
+    -- UpdateGroups()
+    -- DisplayGroups()
     addonFrame:SetScript("OnEvent",EventHandler)
+    -- addonFrame:SetScript("OnUpdate",UpdateFrame)
   end
 end
 
@@ -614,9 +750,10 @@ end
 -- end
 
 addonFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+addonFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+addonFrame:RegisterEvent("CHAT_MSG_SYSTEM")
 addonFrame:RegisterEvent("ADDON_LOADED")
 addonFrame:SetScript("OnEvent",InitAddon)
--- addonFrame:SetScript("OnUpdate",ShowWhenAltZ)
 
 function CThunGroupsDeleteUnknown()
   for k,v in pairs(CThunGroupsDB[guild]) do
