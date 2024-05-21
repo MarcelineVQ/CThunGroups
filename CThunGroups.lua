@@ -679,9 +679,30 @@ local function CreateMinimapIcon()
   return minimap_button
 end
 
+local guild_updated = false
+local first_go = true
+local elapsed = 0
+local offliners = {}
+local function UpdateFrame()
+  elapsed = elapsed + arg1
+  if not first_go and elapsed > 2 then
+    elapsed = 0
+    DisplayGroups()
+  elseif first_go and guild_updated then
+    first_go = false
+    UpdateRaidMembers()
+    UpdateGroups()
+    DisplayGroups()
+    local i_guild,_ = GetGuildInfo("player")
+    -- print("roster update: ",i_guild or "none")
+    guild = i_guild or guild
+    if not CThunGroupsDB[guild] then CThunGroupsDB[guild] = {} end
+  end
+end
+
 local function EventHandler()
   if enabled then
-    if event == "RAID_ROSTER_UPDATE" and (GetNumRaidMembers() > 0) then
+    if not first_go and event == "RAID_ROSTER_UPDATE" and (GetNumRaidMembers() > 0) then
       -- print("roster update")
       UpdateRaidMembers()
       UpdateGroups()
@@ -691,36 +712,16 @@ local function EventHandler()
 end
 
 
-local first_go = true
-local elapsed = 0
-local offliners = {}
-local function UpdateFrame()
-  elapsed = elapsed + arg1
-  if elapsed > 2 then
-    elapsed = 0
-    if first_go then
-      UpdateRaidMembers()
-      UpdateGroups()
-      DisplayGroups()
-    else
-      DisplayGroups()
-    end
-  end
-end
-
 -- have the toggle thing darken the bg
 -- have it color offlines
 local function InitAddon()
   if event == "ADDON_LOADED" and arg1 == "CThunGroups" then
-    GuildRoster()
-  elseif event == "CHAT_MSG_SYSTEM" then  -- still too early sometimes, need to just make a timer I guess or look for events that happen even later
     if not CThunGroupsDB then CThunGroupsDB = {} end
-    local i_guild,_ = GetGuildInfo("player")
-    print("roster update: ",i_guild or "none")
-    guild = i_guild or guild
-    if not CThunGroupsDB[guild] then CThunGroupsDB[guild] = {} end
+    GuildRoster()
     if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
-    -- if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
+  elseif event == "GUILD_ROSTER_UPDATE" then
+    guild_updated = true
+    -- print("guild update occured")
 
     addonFrame:UnregisterEvent("GUILD_ROSTER_UPDATE")
     addonFrame:UnregisterEvent("CHAT_MSG_SYSTEM")
@@ -734,7 +735,14 @@ local function InitAddon()
     -- UpdateGroups()
     -- DisplayGroups()
     addonFrame:SetScript("OnEvent",EventHandler)
-    -- addonFrame:SetScript("OnUpdate",UpdateFrame)
+  -- elseif event == "CHAT_MSG_SYSTEM" then  -- still too early sometimes, need to just make a timer I guess or look for events that happen even later
+    -- if not CThunGroupsDB then CThunGroupsDB = {} end
+    -- send an info request
+    -- local i_guild,_ = GetGuildInfo("player")
+    -- if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
+    -- if DEBUG then DataSource = raidMemberDataExmple else DataSource = CThunGroupsDB[guild] end
+
+    addonFrame:SetScript("OnUpdate",UpdateFrame)
   end
 end
 
@@ -760,6 +768,17 @@ function CThunGroupsDeleteUnknown()
     if v.symbol == 9 then
       CThunGroupsDB[guild][k] = nil
     end
+  end
+end
+
+function CThunGroupsMergeAllInto(guildname)
+  for guild,members in pairs(CThunGroupsDB) do
+    for member,data in pairs(members) do
+      if not CThunGroupsDB[guildname] then CThunGroupsDB[guildname] = {} end
+      if not CThunGroupsDB[guildname][member] then CThunGroupsDB[guildname][member] = {} end
+      CThunGroupsDB[guildname][member] = CThunGroupsDB[guild][member]
+    end
+    if guild ~= guildname then CThunGroupsDB[guild] = nil end
   end
 end
 

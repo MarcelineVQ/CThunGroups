@@ -2,7 +2,7 @@
 ## Title: C'Thun Groups
 ## X-Category: Easy setup of c'thun groups
 ## X-Date: 2024-03-18
-## X-Website: 
+## X-Website: https://github.com/MarcelineVQ/CThunGroups
 ## Version: 1.0
 ## SavedVariables:CThunGroupsDB
 
